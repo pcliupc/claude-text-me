@@ -196,22 +196,22 @@ export class FeishuProvider implements MessageProvider {
 
     // 启动 ngrok 隧道
     const ngrokToken = process.env.TEXTME_NGROK_AUTHTOKEN;
-    if (ngrokToken) {
+    if (ngrokToken && ngrokToken.trim() !== "") {
       try {
         const ngrok = await import("ngrok");
         this.ngrokUrl = await ngrok.default.connect({
           addr: port,
-          authtoken: ngrokToken,
+          authtoken: ngrokToken.trim(),
         });
         console.error(`[claude-text-me] Webhook URL: ${this.ngrokUrl}`);
         console.error(`[claude-text-me] Configure this URL in Feishu app event subscription`);
       } catch (error) {
         console.error(`[claude-text-me] Failed to start ngrok:`, error);
-        console.error(`[claude-text-me] Local server running on port ${port}`);
+        console.error(`[claude-text-me] Bidirectional communication disabled. Local server running on port ${port}`);
       }
     } else {
       console.error(`[claude-text-me] Local server running on port ${port}`);
-      console.error(`[claude-text-me] Set TEXTME_NGROK_AUTHTOKEN for external access`);
+      console.error(`[claude-text-me] Set TEXTME_NGROK_AUTHTOKEN for bidirectional communication`);
     }
   }
 
