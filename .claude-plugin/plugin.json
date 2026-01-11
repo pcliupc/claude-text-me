@@ -1,0 +1,8 @@
+{
+  "name": "claude-text-me",
+  "version": "0.1.0",
+  "description": "Send messages to your phone via Feishu/Lark when Claude needs your attention. Supports bidirectional communication.",
+  "author": {
+    "name": "liupengcheng"
+  }
+}

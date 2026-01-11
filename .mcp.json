@@ -1,0 +1,13 @@
+{
+  "claude-text-me": {
+    "command": "npx",
+    "args": ["tsx", "${CLAUDE_PLUGIN_ROOT}/src/index.ts"],
+    "env": {
+      "TEXTME_FEISHU_APP_ID": "${TEXTME_FEISHU_APP_ID}",
+      "TEXTME_FEISHU_APP_SECRET": "${TEXTME_FEISHU_APP_SECRET}",
+      "TEXTME_FEISHU_USER_ID": "${TEXTME_FEISHU_USER_ID}",
+      "TEXTME_PORT": "${TEXTME_PORT:-3456}",
+      "TEXTME_NGROK_AUTHTOKEN": "${TEXTME_NGROK_AUTHTOKEN}"
+    }
+  }
+}
