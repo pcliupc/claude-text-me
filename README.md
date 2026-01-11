@@ -27,7 +27,7 @@ Claude: [works for 10 minutes...]
 
 ### 1. Prerequisites
 
-- **Node.js 18+** - [Download](https://nodejs.org/)
+- **Bun** - [Install Bun](https://bun.sh) (`curl -fsSL https://bun.sh/install | bash`)
 - **Claude Code** - [Installation Guide](https://docs.anthropic.com/en/docs/claude-code)
 - **Feishu Account** - Personal or enterprise account
 - **ngrok** (optional) - Required only for bidirectional communication
@@ -68,10 +68,8 @@ curl 'https://open.feishu.cn/open-apis/contact/v3/users/batch_get_id?user_id_typ
 # Add the marketplace
 /plugin marketplace add pcliupc/claude-text-me
 
-# Install the plugin
+# Install the plugin (Bun auto-installs dependencies)
 /plugin install claude-text-me@claude-text-me
-
-# The plugin will automatically install dependencies
 ```
 
 **Alternative: Manual Installation**
@@ -82,7 +80,7 @@ git clone https://github.com/pcliupc/claude-text-me.git
 cd claude-text-me
 
 # Install dependencies
-npm install
+bun install
 
 # Install as Claude Code plugin
 /plugin install /path/to/claude-text-me

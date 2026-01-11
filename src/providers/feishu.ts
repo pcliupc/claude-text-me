@@ -1,4 +1,3 @@
-import { createServer, type Server, type IncomingMessage, type ServerResponse } from "node:http";
 import type {
   MessageProvider,
   FeishuConfig,
@@ -12,7 +11,7 @@ export class FeishuProvider implements MessageProvider {
   private config: FeishuConfig;
   private accessToken: string | null = null;
   private tokenExpireAt: number = 0;
-  private server: Server | null = null;
+  private server: ReturnType<typeof Bun.serve> | null = null;
   private messageCallback: ((message: string) => void) | null = null;
   private ngrokUrl: string | null = null;
 
@@ -129,97 +128,83 @@ export class FeishuProvider implements MessageProvider {
     }
   }
 
-  private parseBody(req: IncomingMessage): Promise<unknown> {
-    return new Promise((resolve, reject) => {
-      let body = "";
-      req.on("data", (chunk) => {
-        body += chunk.toString();
-      });
-      req.on("end", () => {
-        try {
-          resolve(JSON.parse(body));
-        } catch {
-          resolve({});
-        }
-      });
-      req.on("error", reject);
-    });
-  }
-
-  private sendResponse(res: ServerResponse, statusCode: number, data: unknown): void {
-    res.writeHead(statusCode, { "Content-Type": "application/json" });
-    res.end(JSON.stringify(data));
-  }
-
   async startListening(onMessage: (message: string) => void): Promise<void> {
     this.messageCallback = onMessage;
     const port = parseInt(process.env.TEXTME_PORT || "3456");
 
-    // 启动本地 HTTP 服务器接收飞书事件
-    this.server = createServer(async (req, res) => {
-      if (req.method === "POST") {
-        const body = (await this.parseBody(req)) as Record<string, unknown>;
+    // 启动本地 HTTP 服务器接收飞书事件 (可选，用于双向通信)
+    try {
+      this.server = Bun.serve({
+        port,
+        fetch: async (req) => {
+          if (req.method === "POST") {
+            const body = await req.json() as Record<string, unknown>;
 
-        // 处理飞书的 URL 验证请求
-        if (body.type === "url_verification") {
-          this.sendResponse(res, 200, { challenge: body.challenge });
-          return;
-        }
-
-        // 处理消息事件
-        const header = body.header as Record<string, unknown> | undefined;
-        if (header?.event_type === "im.message.receive_v1") {
-          const event = body as unknown as FeishuEventMessage;
-          try {
-            const messageContent = JSON.parse(event.event.message.content);
-            if (event.event.message.message_type === "text" && this.messageCallback) {
-              this.messageCallback(messageContent.text);
+            // 处理飞书的 URL 验证请求
+            if (body.type === "url_verification") {
+              return new Response(JSON.stringify({ challenge: body.challenge }), {
+                headers: { "Content-Type": "application/json" },
+              });
             }
-          } catch {
-            console.error("[claude-text-me] Failed to parse message content");
+
+            // 处理消息事件
+            const header = body.header as Record<string, unknown> | undefined;
+            if (header?.event_type === "im.message.receive_v1") {
+              const event = body as unknown as FeishuEventMessage;
+              try {
+                const messageContent = JSON.parse(event.event.message.content);
+                if (event.event.message.message_type === "text" && this.messageCallback) {
+                  this.messageCallback(messageContent.text);
+                }
+              } catch {
+                console.error("[claude-text-me] Failed to parse message content");
+              }
+            }
+
+            return new Response(JSON.stringify({ code: 0 }), {
+              headers: { "Content-Type": "application/json" },
+            });
           }
-        }
 
-        this.sendResponse(res, 200, { code: 0 });
-        return;
-      }
-
-      res.writeHead(200, { "Content-Type": "text/plain" });
-      res.end("OK");
-    });
-
-    await new Promise<void>((resolve) => {
-      this.server!.listen(port, () => {
-        resolve();
+          return new Response("OK");
+        },
+        error: (error) => {
+          console.error("[claude-text-me] Server error:", error);
+          return new Response("Internal Server Error", { status: 500 });
+        },
       });
-    });
 
-    // 启动 ngrok 隧道
-    const ngrokToken = process.env.TEXTME_NGROK_AUTHTOKEN;
-    if (ngrokToken && ngrokToken.trim() !== "") {
-      try {
-        const ngrok = await import("ngrok");
-        this.ngrokUrl = await ngrok.default.connect({
-          addr: port,
-          authtoken: ngrokToken.trim(),
-        });
-        console.error(`[claude-text-me] Webhook URL: ${this.ngrokUrl}`);
-        console.error(`[claude-text-me] Configure this URL in Feishu app event subscription`);
-      } catch (error) {
-        console.error(`[claude-text-me] Failed to start ngrok:`, error);
-        console.error(`[claude-text-me] Bidirectional communication disabled. Local server running on port ${port}`);
-      }
-    } else {
       console.error(`[claude-text-me] Local server running on port ${port}`);
-      console.error(`[claude-text-me] Set TEXTME_NGROK_AUTHTOKEN for bidirectional communication`);
+
+      // 启动 ngrok 隧道
+      const ngrokToken = process.env.TEXTME_NGROK_AUTHTOKEN;
+      if (ngrokToken && ngrokToken.trim() !== "") {
+        try {
+          const ngrok = await import("ngrok");
+          this.ngrokUrl = await ngrok.default.connect({
+            addr: port,
+            authtoken: ngrokToken.trim(),
+          });
+          console.error(`[claude-text-me] Webhook URL: ${this.ngrokUrl}`);
+          console.error(`[claude-text-me] Configure this URL in Feishu app event subscription`);
+        } catch (error) {
+          console.error(`[claude-text-me] Failed to start ngrok:`, error);
+          console.error(`[claude-text-me] Bidirectional communication disabled.`);
+        }
+      } else {
+        console.error(`[claude-text-me] Set TEXTME_NGROK_AUTHTOKEN for bidirectional communication`);
+      }
+    } catch (error) {
+      // HTTP 服务器启动失败不影响 MCP Server 运行
+      console.error(`[claude-text-me] Failed to start HTTP server:`, error);
+      console.error(`[claude-text-me] Bidirectional communication (ask_user) disabled. Send-only mode active.`);
+      this.server = null;
     }
   }
 
   async stopListening(): Promise<void> {
     if (this.server) {
-      await new Promise<void>((resolve) => {
-        this.server!.close(() => resolve());
-      });
+      this.server.stop();
       this.server = null;
     }
 
