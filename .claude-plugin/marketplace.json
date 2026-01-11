@@ -1,0 +1,12 @@
+{
+  "name": "claude-text-me",
+  "owner": {
+    "name": "pcliupc"
+  },
+  "plugins": [
+    {
+      "name": "claude-text-me",
+      "source": "./"
+    }
+  ]
+}

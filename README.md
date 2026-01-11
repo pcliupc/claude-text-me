@@ -65,6 +65,18 @@ curl 'https://open.feishu.cn/open-apis/contact/v3/users/batch_get_id?user_id_typ
 ### 4. Install the Plugin
 
 ```bash
+# Add the marketplace
+/plugin marketplace add pcliupc/claude-text-me
+
+# Install the plugin
+/plugin install claude-text-me@claude-text-me
+
+# The plugin will automatically install dependencies
+```
+
+**Alternative: Manual Installation**
+
+```bash
 # Clone the repository
 git clone https://github.com/pcliupc/claude-text-me.git
 cd claude-text-me
@@ -73,7 +85,7 @@ cd claude-text-me
 npm install
 
 # Install as Claude Code plugin
-claude /plugin install /path/to/claude-text-me
+/plugin install /path/to/claude-text-me
 ```
 
 ### 5. Configure Environment Variables
@@ -184,7 +196,8 @@ npm run dev
 ```
 claude-text-me/
 ├── .claude-plugin/
-│   └── plugin.json       # Plugin manifest for Claude Code
+│   ├── plugin.json        # Plugin manifest for Claude Code
+│   └── marketplace.json   # Marketplace configuration
 ├── .mcp.json              # MCP server configuration
 ├── src/
 │   ├── index.ts           # MCP server entry point & tool definitions
