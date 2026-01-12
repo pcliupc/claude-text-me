@@ -1,4 +1,5 @@
 import * as Lark from "@larksuiteoapi/node-sdk";
+import * as fs from "node:fs";
 import type {
   MessageProvider,
   FeishuConfig,
@@ -13,6 +14,14 @@ const silentLogger: any = {
   trace: () => {},
   fatal: () => {},
 };
+
+// 调试日志
+const DEBUG_LOG = "/tmp/claude-text-me-debug.log";
+function debugLog(msg: string) {
+  try {
+    fs.appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${msg}\n`);
+  } catch {}
+}
 
 export class FeishuProvider implements MessageProvider {
   name = "feishu";
@@ -94,6 +103,7 @@ export class FeishuProvider implements MessageProvider {
 
   async startListening(onMessage: (message: string) => void): Promise<void> {
     this.messageCallback = onMessage;
+    debugLog("startListening called, callback set");
 
     try {
       // 使用飞书长连接模式接收事件，无需公网域名和 ngrok
@@ -108,20 +118,26 @@ export class FeishuProvider implements MessageProvider {
       this.wsClient.start({
         eventDispatcher: new Lark.EventDispatcher({}).register({
           "im.message.receive_v1": async (data) => {
+            debugLog("Event received");
             try {
               const message = data.message;
+              debugLog(`message_type: ${message?.message_type}, hasCallback: ${!!this.messageCallback}`);
               // 只处理用户发来的文本消息
               if (message?.message_type === "text" && this.messageCallback) {
                 const content = JSON.parse(message.content);
+                debugLog(`Calling callback with: ${content.text}`);
                 this.messageCallback(content.text);
+                debugLog("Callback returned");
               }
-            } catch {
-              // 错误被忽略，避免干扰 MCP 协议
+            } catch (err) {
+              debugLog(`Error: ${err}`);
             }
           },
         }),
       });
-    } catch {
+      debugLog("WebSocket started");
+    } catch (err) {
+      debugLog(`WS start error: ${err}`);
       // 启动失败时设为 null，但不影响 send-only 模式
       this.wsClient = null;
     }

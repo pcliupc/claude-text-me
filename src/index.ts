@@ -4,6 +4,15 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { FeishuProvider } from "./providers/feishu.js";
+import * as fs from "node:fs";
+
+// 调试日志
+const DEBUG_LOG = "/tmp/claude-text-me-debug.log";
+function debugLog(msg: string) {
+  try {
+    fs.appendFileSync(DEBUG_LOG, `${new Date().toISOString()} ${msg}\n`);
+  } catch {}
+}
 
 // 初始化飞书 Provider
 const feishuConfig = {
@@ -35,7 +44,7 @@ const server = new McpServer({
 // Tool: send_message - 发送简单文本消息
 server.tool(
   "send_message",
-  "Send a text message to the user's phone via Feishu/Lark. Use this when you need to notify the user about task completion, errors, or any important updates.",
+  "Send a text message to the user's phone via Feishu/Lark. Use this when you need to notify the user about task completion, errors, or any important updates. Especially useful for long-running tasks where the user may be away from the desktop.",
   {
     message: z.string().describe("The message content to send to the user"),
   },
@@ -68,7 +77,7 @@ server.tool(
 // Tool: send_rich_message - 发送富文本卡片消息
 server.tool(
   "send_rich_message",
-  "Send a rich card message with title, content and visual type indicator. Use this for structured notifications like task completion summaries, error reports, or status updates.",
+  "Send a rich card message with title, content and visual type indicator. Use this for structured notifications like task completion summaries, error reports, or status updates. Especially useful for long-running tasks where the user may be away from the desktop.",
   {
     title: z.string().describe("The title of the message card"),
     content: z.string().describe("The markdown content of the message"),
@@ -105,7 +114,7 @@ server.tool(
 // Tool: ask_user - 发送消息并等待用户回复
 server.tool(
   "ask_user",
-  "Send a message to the user and wait for their reply via Feishu. Use this when you need user input or confirmation to proceed with a task. The tool will wait for up to 3 minutes for a response.",
+  "Send a message to the user via Feishu and wait for their reply. Use this when you need user input or confirmation to proceed with a task. This is ideal for long-running tasks or when the user may be away from the desktop - it uses Feishu instead of desktop popups. The tool will wait for up to 3 minutes for a response.",
   {
     message: z.string().describe("The question or message to send to the user"),
     timeout_seconds: z
@@ -116,6 +125,7 @@ server.tool(
   },
   async ({ message, timeout_seconds }) => {
     const timeout = Math.min(timeout_seconds || 180, 300) * 1000;
+    debugLog(`ask_user called, timeout: ${timeout}ms`);
 
     try {
       // 发送消息给用户
@@ -124,16 +134,21 @@ server.tool(
         message + "\n\n*Please reply to this message to continue.*",
         "info"
       );
+      debugLog("Message sent, waiting for reply...");
 
       // 等待用户回复
       const reply = await new Promise<string>((resolve, reject) => {
+        debugLog("Setting pendingReplyResolve");
         pendingReplyResolve = resolve;
 
         replyTimeout = setTimeout(() => {
+          debugLog("Timeout waiting for reply");
           pendingReplyResolve = null;
           reject(new Error("Timeout waiting for user reply"));
         }, timeout);
       });
+
+      debugLog(`Got reply: ${reply}`);
 
       // 清理
       if (replyTimeout) {
@@ -151,6 +166,7 @@ server.tool(
         ],
       };
     } catch (error) {
+      debugLog(`ask_user error: ${error}`);
       const errorMessage = error instanceof Error ? error.message : String(error);
       return {
         content: [
@@ -167,10 +183,13 @@ server.tool(
 
 // 处理用户消息回调
 function handleUserMessage(message: string) {
+  debugLog(`handleUserMessage called with: ${message}, hasResolve: ${!!pendingReplyResolve}`);
   if (pendingReplyResolve) {
+    debugLog("Calling pendingReplyResolve...");
     pendingReplyResolve(message);
+    debugLog("pendingReplyResolve returned");
   } else {
-    console.error(`[claude-text-me] Received message but no pending request: ${message}`);
+    debugLog(`No pending resolve, message ignored`);
   }
 }
 

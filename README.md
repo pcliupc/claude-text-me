@@ -123,6 +123,73 @@ Restart Claude Code and try these prompts:
 "Refactor this module and send me a summary when done"
 ```
 
+## Usage Guide
+
+### Available Tools
+
+| Tool | Purpose | Example |
+|------|---------|---------|
+| `send_message` | Send a simple text notification | "Text me when the build is done" |
+| `send_rich_message` | Send a formatted card with title/status | "Send me a success notification when deployment completes" |
+| `ask_user` | Ask for user input via Feishu (waits for reply) | "Ask me which branch to deploy to" |
+
+### Getting Notifications
+
+Simply tell Claude to notify you:
+
+```
+"Run the full test suite and send me a message with the results"
+"Deploy to production and text me when it's done"
+```
+
+### Getting Confirmations via Feishu
+
+Claude Code has a built-in desktop confirmation feature. To use Feishu instead (useful when you're away from the computer), explicitly mention it in your prompt:
+
+```
+"Deploy to staging, and use the Feishu ask_user tool to get my confirmation first"
+"Refactor this code, but ask me via Feishu before making any destructive changes"
+```
+
+Or simply phrase your request to naturally lead to Feishu communication:
+
+```
+"I'll be away from my desk. Deploy the application and text me on Feishu when you need confirmation"
+```
+
+### Example Conversations
+
+**Task Completion Notification:**
+```
+You: Run all tests and send me the results
+
+Claude: [runs tests...] Sending message via Feishu...
+
+📱 Your phone: "All tests passed (127/127)"
+```
+
+**Confirmation Before Deployment:**
+```
+You: Deploy to production, but confirm with me via Feishu first
+
+Claude: [sends Feishu message] "Ready to deploy to production. Proceed?"
+
+📱 You reply: "Yes"
+
+Claude: Deploying...
+```
+
+**Interactive Decision Making:**
+```
+You: Check which branches are available and ask me via Feishu which one to deploy
+
+Claude: [sends Feishu message] "Available branches: main, staging, dev-v2. Which one should I deploy?"
+
+📱 You reply: "staging"
+
+Claude: Deploying staging...
+```
+
 ## How It Works
 
 ```
