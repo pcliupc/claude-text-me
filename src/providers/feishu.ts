@@ -87,19 +87,24 @@ export class FeishuProvider implements MessageProvider {
 
     try {
       // 使用飞书长连接模式接收事件，无需公网域名和 ngrok
+      // 注意：必须关闭 SDK 日志，否则会干扰 MCP 协议的 stdio 通信
       this.wsClient = new Lark.WSClient({
         appId: this.config.appId,
         appSecret: this.config.appSecret,
-        loggerLevel: Lark.LoggerLevel.info,
+        loggerLevel: Lark.LoggerLevel.off,
       });
 
       this.wsClient.start({
         eventDispatcher: new Lark.EventDispatcher({}).register({
           "im.message.receive_v1": async (data) => {
+            console.error("[claude-text-me] Received event:", JSON.stringify(data, null, 2));
             try {
               const message = data.message;
-              if (message.message_type === "text" && this.messageCallback) {
+              console.error("[claude-text-me] Message type:", message?.message_type, "Sender:", message?.sender?.sender_id?.user_id);
+              // 只处理用户发来的文本消息，忽略机器人自己发的消息
+              if (message?.message_type === "text" && this.messageCallback) {
                 const content = JSON.parse(message.content);
+                console.error("[claude-text-me] Message content:", content.text);
                 this.messageCallback(content.text);
               }
             } catch (error) {
@@ -110,7 +115,7 @@ export class FeishuProvider implements MessageProvider {
       });
 
       console.error("[claude-text-me] WebSocket connection started (long connection mode)");
-      console.error("[claude-text-me] Bidirectional communication enabled - no ngrok required!");
+      console.error("[claude-text-me] Listening for messages...");
     } catch (error) {
       console.error("[claude-text-me] Failed to start WebSocket connection:", error);
       console.error("[claude-text-me] Bidirectional communication (ask_user) disabled. Send-only mode active.");
