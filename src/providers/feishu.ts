@@ -180,11 +180,12 @@ export class FeishuProvider implements MessageProvider {
       const ngrokToken = process.env.TEXTME_NGROK_AUTHTOKEN;
       if (ngrokToken && ngrokToken.trim() !== "") {
         try {
-          const ngrok = await import("ngrok");
-          this.ngrokUrl = await ngrok.default.connect({
+          const ngrok = await import("@ngrok/ngrok");
+          const listener = await ngrok.forward({
             addr: port,
             authtoken: ngrokToken.trim(),
           });
+          this.ngrokUrl = listener.url() || null;
           console.error(`[claude-text-me] Webhook URL: ${this.ngrokUrl}`);
           console.error(`[claude-text-me] Configure this URL in Feishu app event subscription`);
         } catch (error) {
@@ -210,8 +211,8 @@ export class FeishuProvider implements MessageProvider {
 
     if (this.ngrokUrl) {
       try {
-        const ngrok = await import("ngrok");
-        await ngrok.default.disconnect();
+        const ngrok = await import("@ngrok/ngrok");
+        await ngrok.disconnect();
       } catch {
         // Ignore ngrok disconnect errors
       }
