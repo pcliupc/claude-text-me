@@ -287,6 +287,54 @@ Claude: Deployment is 60% complete. All containers are healthy...
 | `TEXTME_FEISHU_APP_SECRET` | Yes | Your Feishu app's App Secret |
 | `TEXTME_FEISHU_USER_ID` | Yes | Your Feishu User ID (receiver) |
 
+## Known Limitations
+
+### 1. Cannot Wake Up Claude Code After Task Completion
+
+Once a Claude Code task completes and becomes idle, **the plugin cannot proactively wake it up** when you send a Feishu message.
+
+**What happens:**
+- You send a message via Feishu → Message is received and saved to queue
+- But Claude Code is idle → It won't check the queue until a new task starts
+
+**Workarounds:**
+- Use "listening mode" prompts: "Enter listening mode and wait for my Feishu messages for 30 minutes"
+- Set up `ask_user` before the task ends if you expect to need further interaction
+- Send a new message from desktop to trigger Claude, then check for queued messages
+
+**Root cause:** MCP servers are passive responders and cannot initiate actions on their own.
+
+---
+
+### 2. Claude May Use Desktop Confirmation Instead of Feishu
+
+Claude Code has a built-in desktop confirmation feature (`AskUserQuestion`). Sometimes Claude chooses this over the `ask_user` tool.
+
+**What happens:**
+- You say "deploy and confirm with me"
+- Claude uses desktop popup instead of Feishu
+- If you're away from your computer, the task hangs
+
+**Workarounds:**
+- **Be explicit in your prompt**: "Use the Feishu ask_user tool for confirmation, not desktop popup"
+- **Use trigger phrases**: "I'll be away from my desk", "Use Feishu for all confirmations"
+- **Phrase as a long-running task**: "I'm leaving my computer. Deploy and use Feishu if you need anything"
+
+**Why this happens:** Claude chooses tools based on context. The built-in confirmation tool is always available and may be prioritized.
+
+---
+
+### 3. Message Queue Persistence
+
+Messages in the queue are **only kept in memory** and will be lost if:
+- Claude Code is restarted
+- The plugin is reloaded
+- System restarts
+
+There is no persistent storage for queued messages.
+
+---
+
 ## Contributing
 
 Contributions are welcome! Here's how to get started:
