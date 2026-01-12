@@ -183,8 +183,6 @@ async function main() {
   const transport = new StdioServerTransport();
   await server.connect(transport);
 
-  console.error("[claude-text-me] MCP Server started");
-
   // 优雅关闭
   process.on("SIGINT", async () => {
     await provider.stopListening();

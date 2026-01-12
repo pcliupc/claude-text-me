@@ -35,10 +35,15 @@ Claude: [works for 10 minutes...]
 
 1. Go to [Feishu Open Platform](https://open.feishu.cn/) and create a new **Enterprise Self-built App**
 2. Navigate to **Credentials & Basic Info** and copy your **App ID** and **App Secret**
-3. Go to **Permissions & Scopes** and add:
+3. Go to **Permissions & Scopes** and add the following permissions:
    - `im:message` - Send messages
    - `im:message.receive_v1` - Receive messages (for bidirectional communication)
-4. Go to **Events & Callbacks** → **Event Subscription** and enable **Long Connection Mode** (长连接模式)
+
+   **Important**: After adding each permission, click **"Edit Scope"** (编辑权限范围) and add your account to the available scope.
+
+4. Go to **Events & Callbacks** → **Event Subscription**:
+   - Enable **Long Connection Mode** (长连接模式)
+   - Add subscription: **`im.message.receive_v1`**
 5. Go to **App Release** and publish the app to make it available
 
 ### 3. Get Your User ID

@@ -1,18 +1,8 @@
 import * as Lark from "@larksuiteoapi/node-sdk";
-import * as fs from "node:fs";
 import type {
   MessageProvider,
   FeishuConfig,
 } from "./types.js";
-
-// 调试日志文件路径 - 不会干扰 MCP 协议
-const DEBUG_LOG_PATH = "/tmp/claude-text-me-debug.log";
-
-// 写入调试日志到文件
-function debugLog(...args: unknown[]) {
-  const timestamp = new Date().toISOString();
-  fs.appendFileSync(DEBUG_LOG_PATH, `[${timestamp}] ${args.join(" ")}\n`);
-}
 
 // 空的 logger 实现，避免 SDK 日志干扰 MCP 协议的 stdio 通信
 const silentLogger: any = {
@@ -105,13 +95,6 @@ export class FeishuProvider implements MessageProvider {
   async startListening(onMessage: (message: string) => void): Promise<void> {
     this.messageCallback = onMessage;
 
-    // 清空旧日志
-    try {
-      fs.writeFileSync(DEBUG_LOG_PATH, `=== claude-text-me debug log started ===\n`);
-    } catch {
-      // 忽略
-    }
-
     try {
       // 使用飞书长连接模式接收事件，无需公网域名和 ngrok
       // 必须使用空 logger，否则 SDK 日志会干扰 MCP 协议的 stdio 通信
@@ -122,41 +105,23 @@ export class FeishuProvider implements MessageProvider {
         logger: silentLogger,
       });
 
-      // 注册所有可能的事件，用于调试
-      const dispatcher = new Lark.EventDispatcher({});
-
-      // 注册所有可能的事件类型
-      const eventTypes = [
-        "im.message.receive_v1",
-        "message.read_v1",
-        "message.message_read_v1",
-      ];
-
-      for (const eventType of eventTypes) {
-        dispatcher.register({
-          [eventType]: async (data: any) => {
-            debugLog(`Event received: ${eventType}`, JSON.stringify(data));
+      this.wsClient.start({
+        eventDispatcher: new Lark.EventDispatcher({}).register({
+          "im.message.receive_v1": async (data) => {
             try {
-              if (eventType === "im.message.receive_v1") {
-                const message = data.message;
-                debugLog(`Message type:`, message?.message_type, `Sender:`, message?.sender?.sender_id?.user_id);
-                if (message?.message_type === "text" && this.messageCallback) {
-                  const content = JSON.parse(message.content);
-                  debugLog(`Message content:`, content.text);
-                  this.messageCallback(content.text);
-                }
+              const message = data.message;
+              // 只处理用户发来的文本消息
+              if (message?.message_type === "text" && this.messageCallback) {
+                const content = JSON.parse(message.content);
+                this.messageCallback(content.text);
               }
-            } catch (error) {
-              debugLog(`Error handling event:`, error);
+            } catch {
+              // 错误被忽略，避免干扰 MCP 协议
             }
           },
-        });
-      }
-
-      this.wsClient.start({ eventDispatcher: dispatcher });
-      debugLog(`WebSocket client started, listening for events...`);
-    } catch (error) {
-      debugLog(`Failed to start WebSocket:`, error);
+        }),
+      });
+    } catch {
       // 启动失败时设为 null，但不影响 send-only 模式
       this.wsClient = null;
     }
