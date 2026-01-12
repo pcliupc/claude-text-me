@@ -132,6 +132,47 @@ Restart Claude Code and try these prompts:
 | `send_message` | Send a simple text notification | "Text me when the build is done" |
 | `send_rich_message` | Send a formatted card with title/status | "Send me a success notification when deployment completes" |
 | `ask_user` | Ask for user input via Feishu (waits for reply) | "Ask me which branch to deploy to" |
+| `get_messages` | Check for user's spontaneous messages | "Check if I sent any messages while you were working" |
+
+### Working Away from the Computer
+
+When you're away from your desk, you have two ways to interact with Claude:
+
+#### 1. Using `ask_user` (Wait for Response)
+
+Use this when Claude needs to ask you something:
+
+```
+"Deploy to production, but confirm with me first"
+"Ask me which branch to deploy via Feishu"
+```
+
+Claude will send a Feishu message and wait up to 3 minutes for your reply.
+
+#### 2. Using `send_message` + `get_messages` (Spontaneous Communication)
+
+Use this when you want to initiate communication or when you might have questions:
+
+```
+"Deploy the application. I'll send you a message if I have any questions - check periodically using get_messages"
+```
+
+This pattern allows you to:
+1. Receive notifications via `send_message`
+2. Reply to those messages in Feishu
+3. Have Claude check for your replies using `get_messages`
+
+### Remote Mode Prompts
+
+Here are some prompt patterns that work well:
+
+```
+"I'll be away from my desk. Run the deployment and use Feishu for any confirmations."
+
+"I'm leaving my computer. Monitor the build and text me if there are issues. Check for my messages every few minutes."
+
+"Start the long-running task. Send me progress updates, and use ask_user if you need my input."
+```
 
 ### Getting Notifications
 
@@ -140,21 +181,6 @@ Simply tell Claude to notify you:
 ```
 "Run the full test suite and send me a message with the results"
 "Deploy to production and text me when it's done"
-```
-
-### Getting Confirmations via Feishu
-
-Claude Code has a built-in desktop confirmation feature. To use Feishu instead (useful when you're away from the computer), explicitly mention it in your prompt:
-
-```
-"Deploy to staging, and use the Feishu ask_user tool to get my confirmation first"
-"Refactor this code, but ask me via Feishu before making any destructive changes"
-```
-
-Or simply phrase your request to naturally lead to Feishu communication:
-
-```
-"I'll be away from my desk. Deploy the application and text me on Feishu when you need confirmation"
 ```
 
 ### Example Conversations
@@ -190,6 +216,41 @@ Claude: [sends Feishu message] "Available branches: main, staging, dev-v2. Which
 Claude: Deploying staging...
 ```
 
+**Spontaneous Communication with get_messages:**
+```
+You: I'll be away from my desk. Deploy to staging and check if I send any messages
+
+Claude: [sends Feishu message] "Starting deployment to staging..."
+
+📱 You reply: "Wait, deploy to dev-v2 instead"
+
+[After some time...]
+
+Claude: [calls get_messages] "Received 1 message from user via Feishu:
+- Wait, deploy to dev-v2 instead"
+
+Claude: Got it! Changing target to dev-v2. Deploying...
+```
+
+**Long-Running Task with Check-ins:**
+```
+You: Start the production deployment. I'll be away, so send me updates and check for my messages every 5 minutes
+
+Claude: Starting deployment... [sends progress update via send_message]
+
+[5 minutes later...]
+
+Claude: [calls get_messages] "No pending messages from user."
+[deployment continues]
+
+📱 You reply to earlier message: "How's the deployment going?"
+
+Claude: [calls get_messages] "Received 1 message:
+- How's the deployment going?"
+
+Claude: Deployment is 60% complete. All containers are healthy...
+```
+
 ## How It Works
 
 ```
@@ -200,16 +261,23 @@ Claude: Deploying staging...
                                   │                        │
                                   │◀───────────────────────┤
                                   │  WebSocket (长连接)     │
-                                  │                        ▼
+                                  │  + Message Queue       ▼
                                   │               ┌─────────────────┐
                                   └──────────────▶│   Your Phone    │
                                                   └─────────────────┘
 ```
 
 1. Claude Code connects to the plugin via MCP (Model Context Protocol)
-2. When Claude decides to notify you, it calls `send_message` or `send_rich_message`
+2. When Claude needs to notify you, it calls `send_message` or `send_rich_message`
 3. The plugin uses Feishu's API to send a message to your account
-4. For bidirectional communication, the plugin uses Feishu's WebSocket long connection mode - no public domain or ngrok required
+4. If you reply to a notification, the message is saved to an internal queue
+5. When Claude calls `get_messages`, it retrieves your queued replies
+6. For confirmations, use `ask_user` - it waits synchronously for your reply via Feishu
+
+**Message Queue Behavior:**
+- Messages you send in Feishu are saved when there's no pending `ask_user` waiting
+- Queue holds up to 50 messages, with 1-hour expiration
+- `get_messages` retrieves and clears the queue
 
 ## Environment Variables Reference
 

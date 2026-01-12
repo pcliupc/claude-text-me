@@ -35,6 +35,29 @@ const provider = new FeishuProvider(feishuConfig);
 let pendingReplyResolve: ((message: string) => void) | null = null;
 let replyTimeout: ReturnType<typeof setTimeout> | null = null;
 
+// 消息队列 - 保存用户自发发送的消息（非 ask_user 回复）
+interface QueuedMessage {
+  text: string;
+  timestamp: number;
+}
+
+const messageQueue: QueuedMessage[] = [];
+const MAX_QUEUE_SIZE = 50;
+
+// 检查并清理过期消息（超过 1 小时的消息）
+function cleanupOldMessages() {
+  const oneHourAgo = Date.now() - 60 * 60 * 1000;
+  const initialLength = messageQueue.length;
+  for (let i = messageQueue.length - 1; i >= 0; i--) {
+    if (messageQueue[i].timestamp < oneHourAgo) {
+      messageQueue.splice(i, 1);
+    }
+  }
+  if (messageQueue.length !== initialLength) {
+    debugLog(`Cleaned up ${initialLength - messageQueue.length} old messages`);
+  }
+}
+
 // 创建 MCP Server
 const server = new McpServer({
   name: "claude-text-me",
@@ -44,7 +67,7 @@ const server = new McpServer({
 // Tool: send_message - 发送简单文本消息
 server.tool(
   "send_message",
-  "Send a text message to the user's phone via Feishu/Lark. Use this when you need to notify the user about task completion, errors, or any important updates. Especially useful for long-running tasks where the user may be away from the desktop.",
+  "Send a text notification to the user's phone via Feishu/Lark. Use this for task completion updates, error notifications, or status updates. IMPORTANT: The user may reply to your message, so call get_messages() periodically to check for responses. This is especially useful when the user is away from the desktop.",
   {
     message: z.string().describe("The message content to send to the user"),
   },
@@ -77,7 +100,7 @@ server.tool(
 // Tool: send_rich_message - 发送富文本卡片消息
 server.tool(
   "send_rich_message",
-  "Send a rich card message with title, content and visual type indicator. Use this for structured notifications like task completion summaries, error reports, or status updates. Especially useful for long-running tasks where the user may be away from the desktop.",
+  "Send a formatted card message with title and status indicator (success/warning/info) via Feishu/Lark. Use this for structured notifications like deployment summaries, test results, or error reports. IMPORTANT: The user may reply to your message, so call get_messages() periodically to check for responses. This is especially useful when the user is away from the desktop.",
   {
     title: z.string().describe("The title of the message card"),
     content: z.string().describe("The markdown content of the message"),
@@ -114,7 +137,7 @@ server.tool(
 // Tool: ask_user - 发送消息并等待用户回复
 server.tool(
   "ask_user",
-  "Send a message to the user via Feishu and wait for their reply. Use this when you need user input or confirmation to proceed with a task. This is ideal for long-running tasks or when the user may be away from the desktop - it uses Feishu instead of desktop popups. The tool will wait for up to 3 minutes for a response.",
+  "Contact the user via Feishu and wait for their reply. CRITICAL: This is the PRIMARY way to get user confirmation or input - ALWAYS use this tool instead of desktop popup when the user might be away from the computer. The user receives a Feishu notification and can reply from their phone. Supports up to 3 minutes wait time.",
   {
     message: z.string().describe("The question or message to send to the user"),
     timeout_seconds: z
@@ -181,15 +204,70 @@ server.tool(
   }
 );
 
+// Tool: get_messages - 获取用户自发发送的消息
+server.tool(
+  "get_messages",
+  "Get any messages the user sent via Feishu that weren't responses to a question. The user may have sent spontaneous messages or instructions while you were working. Call this periodically during long-running tasks to check for user input. Messages are cleared after retrieval.",
+  {},
+  async () => {
+    debugLog(`get_messages called, queue size: ${messageQueue.length}`);
+
+    if (messageQueue.length === 0) {
+      return {
+        content: [
+          {
+            type: "text",
+            text: "No pending messages from user.",
+          },
+        ],
+      };
+    }
+
+    // 复制并清空队列
+    const messages = [...messageQueue];
+    messageQueue.length = 0;
+
+    debugLog(`Returning ${messages.length} messages`);
+
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Received ${messages.length} message(s) from user via Feishu:\n${messages
+            .map((m) => `- ${m.text}`)
+            .join("\n")}`,
+        },
+      ],
+    };
+  }
+);
+
 // 处理用户消息回调
 function handleUserMessage(message: string) {
-  debugLog(`handleUserMessage called with: ${message}, hasResolve: ${!!pendingReplyResolve}`);
+  debugLog(
+    `handleUserMessage called with: ${message}, hasResolve: ${!!pendingReplyResolve}, queueSize: ${messageQueue.length}`
+  );
+
   if (pendingReplyResolve) {
+    // 有等待中的 ask_user，直接处理
     debugLog("Calling pendingReplyResolve...");
     pendingReplyResolve(message);
     debugLog("pendingReplyResolve returned");
   } else {
-    debugLog(`No pending resolve, message ignored`);
+    // 没有等待中的请求，保存到队列
+    messageQueue.push({
+      text: message,
+      timestamp: Date.now(),
+    });
+
+    // 限制队列大小
+    if (messageQueue.length > MAX_QUEUE_SIZE) {
+      messageQueue.shift(); // 移除最旧的消息
+    }
+
+    debugLog(
+      `No pending resolve, message queued (total: ${messageQueue.length}/${MAX_QUEUE_SIZE})`
+    );
   }
 }
 
