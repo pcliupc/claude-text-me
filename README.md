@@ -30,7 +30,6 @@ Claude: [works for 10 minutes...]
 - **Bun** - [Install Bun](https://bun.sh) (`curl -fsSL https://bun.sh/install | bash`)
 - **Claude Code** - [Installation Guide](https://docs.anthropic.com/en/docs/claude-code)
 - **Feishu Account** - Personal or enterprise account
-- **ngrok** (optional) - Required only for bidirectional communication
 
 ### 2. Create Feishu App
 
@@ -39,7 +38,8 @@ Claude: [works for 10 minutes...]
 3. Go to **Permissions & Scopes** and add:
    - `im:message` - Send messages
    - `im:message.receive_v1` - Receive messages (for bidirectional communication)
-4. Go to **App Release** and publish the app to make it available
+4. Go to **Events & Callbacks** → **Event Subscription** and enable **Long Connection Mode** (长连接模式)
+5. Go to **App Release** and publish the app to make it available
 
 ### 3. Get Your User ID
 
@@ -95,9 +95,6 @@ Add to your `~/.zshrc`, `~/.bashrc`, or `~/.claude/settings.json`:
 export TEXTME_FEISHU_APP_ID="cli_xxxxxxxxxxxx"
 export TEXTME_FEISHU_APP_SECRET="xxxxxxxxxxxxxxxxxxxxxxxx"
 export TEXTME_FEISHU_USER_ID="ou_xxxxxxxxxxxxxxxxxxxxxxxx"
-
-# Optional: for bidirectional communication
-export TEXTME_NGROK_AUTHTOKEN="your_ngrok_token"
 ```
 
 **Or in `~/.claude/settings.json`:**
@@ -106,8 +103,7 @@ export TEXTME_NGROK_AUTHTOKEN="your_ngrok_token"
   "env": {
     "TEXTME_FEISHU_APP_ID": "cli_xxxxxxxxxxxx",
     "TEXTME_FEISHU_APP_SECRET": "xxxxxxxxxxxxxxxxxxxxxxxx",
-    "TEXTME_FEISHU_USER_ID": "ou_xxxxxxxxxxxxxxxxxxxxxxxx",
-    "TEXTME_NGROK_AUTHTOKEN": "your_ngrok_token"
+    "TEXTME_FEISHU_USER_ID": "ou_xxxxxxxxxxxxxxxxxxxxxxxx"
   }
 }
 ```
@@ -122,33 +118,6 @@ Restart Claude Code and try these prompts:
 "Refactor this module and send me a summary when done"
 ```
 
-## Bidirectional Communication Setup
-
-For the `ask_user` tool to work (where Claude waits for your reply), you need to set up a webhook:
-
-1. Get an ngrok auth token from [ngrok.com](https://ngrok.com)
-2. Set the `TEXTME_NGROK_AUTHTOKEN` environment variable
-3. Start Claude Code - you'll see a log message like:
-   ```
-   [claude-text-me] Webhook URL: https://abc123.ngrok.io
-   ```
-4. Go to your Feishu app → **Events & Callbacks** → **Event Subscription**
-5. Set the Request URL to the ngrok URL
-6. Add subscription: `im.message.receive_v1`
-7. Save and verify
-
-**Note:** Free ngrok URLs change on restart. For a stable URL, use [ngrok's paid plans](https://ngrok.com/pricing) or deploy to a server with a fixed domain.
-
-## Environment Variables Reference
-
-| Variable | Required | Default | Description |
-|----------|----------|---------|-------------|
-| `TEXTME_FEISHU_APP_ID` | Yes | - | Your Feishu app's App ID |
-| `TEXTME_FEISHU_APP_SECRET` | Yes | - | Your Feishu app's App Secret |
-| `TEXTME_FEISHU_USER_ID` | Yes | - | Your Feishu User ID (receiver) |
-| `TEXTME_NGROK_AUTHTOKEN` | No | - | ngrok token for bidirectional communication |
-| `TEXTME_PORT` | No | `3456` | Local server port for webhook |
-
 ## How It Works
 
 ```
@@ -158,7 +127,7 @@ For the `ask_user` tool to work (where Claude waits for your reply), you need to
 └─────────────────┘      └─────────────────┘      └─────────────────┘
                                   │                        │
                                   │◀───────────────────────┤
-                                  │   Webhook (optional)   │
+                                  │  WebSocket (长连接)     │
                                   │                        ▼
                                   │               ┌─────────────────┐
                                   └──────────────▶│   Your Phone    │
@@ -168,7 +137,15 @@ For the `ask_user` tool to work (where Claude waits for your reply), you need to
 1. Claude Code connects to the plugin via MCP (Model Context Protocol)
 2. When Claude decides to notify you, it calls `send_message` or `send_rich_message`
 3. The plugin uses Feishu's API to send a message to your account
-4. For bidirectional communication, ngrok creates a tunnel so Feishu can send your replies back
+4. For bidirectional communication, the plugin uses Feishu's WebSocket long connection mode - no public domain or ngrok required
+
+## Environment Variables Reference
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `TEXTME_FEISHU_APP_ID` | Yes | Your Feishu app's App ID |
+| `TEXTME_FEISHU_APP_SECRET` | Yes | Your Feishu app's App Secret |
+| `TEXTME_FEISHU_USER_ID` | Yes | Your Feishu User ID (receiver) |
 
 ## Contributing
 
@@ -221,7 +198,6 @@ claude-text-me/
 - [ ] DingTalk (钉钉) support
 - [ ] Slack support
 - [ ] Telegram support
-- [ ] Stable webhook without ngrok (Cloudflare Tunnel support)
 - [ ] Message templates / customization
 - [ ] Rate limiting / message batching
 
